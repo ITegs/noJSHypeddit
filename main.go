@@ -31,9 +31,7 @@ func initDB() (*mongo.Client, error) {
 
 	fmt.Println("Connection to MongoDB established!")
 
-	if false {
-		insertSpotifyId(mongoClient, "high-tide", "4PkWff16v14sACvFBrKtI0")
-	}
+	// insertSpotifyId(mongoClient, "high-tide", "4PkWff16v14sACvFBrKtI0")
 
 	return mongoClient, nil
 }
@@ -54,7 +52,7 @@ func main() {
 	}
 
 	fmt.Println("Opening the template")
-	tmpl, err := template.ParseFiles("./static/index.html")
+	tmpl, err := template.ParseFiles("./static/song.html")
 	if err != nil {
 		fmt.Println("Opening template failed")
 		return
@@ -88,13 +86,13 @@ func (s *apiServer) buildApi() *httprouter.Router {
 	var routes = []*Route{
 		{
 			Method:  http.MethodGet,
-			Path:    "/",
-			Handler: http.HandlerFunc(s.index),
+			Path:    "/s/:songId",
+			Handler: http.HandlerFunc(s.song),
 		},
 		{
 			Method:  http.MethodGet,
 			Path:    "/spotify",
-			Handler: http.HandlerFunc(s.spotifyRef),
+			Handler: http.HandlerFunc(s.spotifyRedirect),
 		},
 	}
 
@@ -106,9 +104,10 @@ func (s *apiServer) buildApi() *httprouter.Router {
 	return router
 }
 
-func (s *apiServer) index(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Got request on index")
-	id := r.URL.Query().Get("id")
+func (s *apiServer) song(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Got request on song endpoint")
+	p := httprouter.ParamsFromContext(r.Context())
+	id := p.ByName("songId")
 	if id == "" {
 		fmt.Println("No id given")
 		return
@@ -129,7 +128,8 @@ func (s *apiServer) index(w http.ResponseWriter, r *http.Request) {
 	s.template.Execute(w, data)
 }
 
-func (s *apiServer) spotifyRef(w http.ResponseWriter, r *http.Request) {
+func (s *apiServer) spotifyRedirect(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Got request on spotify endpoint")
 	id := r.URL.Query().Get("id")
 	http.Redirect(w, r, "https://open.spotify.com/intl-de/track/"+id, http.StatusFound)
 }
@@ -141,7 +141,7 @@ type Link struct {
 
 func insertSpotifyId(mCl *mongo.Client, song string, spotify string) {
 	collection := mCl.Database("noJSHypeddit").Collection("links")
-	newLink := Link{
+	newLink := &Link{
 		SongID:    song,
 		SpotifyID: spotify,
 	}
