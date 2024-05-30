@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
 
-	"github.com/go-redis/redis"
 	"github.com/julienschmidt/httprouter"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type PageData struct {
@@ -14,36 +17,41 @@ type PageData struct {
 	Spotify string
 }
 
-func initDB() *redis.Client {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     "redis:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
-
-	err := rdb.Ping().Err()
+func initDB() (*mongo.Client, error) {
+	clientOptions := options.Client().ApplyURI("mongodb://mongodb:27017/")
+	mongoClient, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
-		fmt.Println("Connection to Redis couldnt be made.")
-		panic(err)
+		return nil, err
 	}
 
-	fmt.Println("Connection to Redis established!")
+	err = mongoClient.Ping(context.TODO(), nil)
+	if err != nil {
+		return nil, err
+	}
 
-	insertSpotifyId(rdb, "high-tide", "4PkWff16v14sACvFBrKtI0")
+	fmt.Println("Connection to MongoDB established!")
 
-	return rdb
+	if false {
+		insertSpotifyId(mongoClient, "high-tide", "4PkWff16v14sACvFBrKtI0")
+	}
+
+	return mongoClient, nil
 }
 
 type apiServer struct {
 	template    *template.Template
-	redisClient *redis.Client
+	mongoClient *mongo.Client
 }
 
 func main() {
 	fmt.Println("Program started!")
 
 	fmt.Println("Initializing the DB")
-	rdb := initDB()
+	mCl, err := initDB()
+	if err != nil {
+		fmt.Println("Connection to MongoDB failed")
+		return
+	}
 
 	fmt.Println("Opening the template")
 	tmpl, err := template.ParseFiles("./static/index.html")
@@ -54,7 +62,7 @@ func main() {
 
 	apiServer := &apiServer{
 		template:    tmpl,
-		redisClient: rdb,
+		mongoClient: mCl,
 	}
 
 	api := apiServer.buildApi()
@@ -106,7 +114,12 @@ func (s *apiServer) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Println("Got a valid id: ", id)
-	spotifyId := getSpotifyId(s.redisClient, id)
+	spotifyId, err := getSpotifyId(s.mongoClient, id)
+	if err != nil {
+		fmt.Println("No SpotifyId found")
+		fmt.Println(err)
+		return
+	}
 	fmt.Println("Spotify id: ", spotifyId)
 
 	data := PageData{
@@ -121,18 +134,32 @@ func (s *apiServer) spotifyRef(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "https://open.spotify.com/intl-de/track/"+id, http.StatusFound)
 }
 
-func insertSpotifyId(rdb *redis.Client, userId string, spotifyId string) {
-	err := rdb.Set(userId, spotifyId, 0).Err()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("Inserted %s into %s\n", spotifyId, userId)
+type Link struct {
+	SongID    string `bson:"songId"`
+	SpotifyID string `bson:"spotifyId"`
 }
 
-func getSpotifyId(rdb *redis.Client, userId string) string {
-	value, err := rdb.Get(userId).Result()
+func insertSpotifyId(mCl *mongo.Client, song string, spotify string) {
+	collection := mCl.Database("noJSHypeddit").Collection("links")
+	newLink := Link{
+		SongID:    song,
+		SpotifyID: spotify,
+	}
+	result, err := collection.InsertOne(context.TODO(), newLink)
 	if err != nil {
 		panic(err)
 	}
-	return value
+	fmt.Printf("Inserted Song with ID: %s. MongoID: %s\n", song, result.InsertedID)
+}
+
+func getSpotifyId(mCl *mongo.Client, song string) (string, error) {
+	collection := mCl.Database("noJSHypeddit").Collection("links")
+	filter := bson.D{{Key: "songId", Value: song}}
+	var result Link
+	err := collection.FindOne(context.TODO(), filter).Decode(&result)
+	if err != nil {
+		return "", err
+	}
+
+	return result.SpotifyID, nil
 }
