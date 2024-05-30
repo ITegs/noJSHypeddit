@@ -12,9 +12,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type PageData struct {
-	Name    string
-	Spotify string
+type Song struct {
+	SongId            string `bson:"songId"`
+	Name              string `bson:"name"`
+	SpotifyId         string `bson:"spotifyId"`
+	NumClicksSongId   int    `bson:"numClicks-songId"`
+	NumClickSpotifyId int    `bson:"numClicks-spotifyId"`
 }
 
 func initDB() (*mongo.Client, error) {
@@ -31,7 +34,12 @@ func initDB() (*mongo.Client, error) {
 
 	fmt.Println("Connection to MongoDB established!")
 
-	// insertSpotifyId(mongoClient, "high-tide", "4PkWff16v14sACvFBrKtI0")
+	// hometown := &Song{
+	// 	Name:      "Hometown",
+	// 	SongID:    "hometown",
+	// 	SpotifyID: "47x1Gh7yk5mblUWxWRdtjH",
+	// }
+	// insertSong(mongoClient, hometown)
 
 	return mongoClient, nil
 }
@@ -104,6 +112,11 @@ func (s *apiServer) buildApi() *httprouter.Router {
 	return router
 }
 
+type PageData struct {
+	Name    string
+	Spotify string
+}
+
 func (s *apiServer) song(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Got request on song endpoint")
 	p := httprouter.ParamsFromContext(r.Context())
@@ -113,53 +126,56 @@ func (s *apiServer) song(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Println("Got a valid id: ", id)
-	spotifyId, err := getSpotifyId(s.mongoClient, id)
+	song, err := getSong(s.mongoClient, id)
 	if err != nil {
-		fmt.Println("No SpotifyId found")
+		fmt.Println("No Song found")
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Spotify id: ", spotifyId)
 
 	data := PageData{
-		Spotify: spotifyId,
+		Name:    song.Name,
+		Spotify: song.SpotifyId,
 	}
 
 	s.template.Execute(w, data)
+	addClick(s.mongoClient, id, "songId")
 }
 
 func (s *apiServer) spotifyRedirect(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Got request on spotify endpoint")
 	id := r.URL.Query().Get("id")
 	http.Redirect(w, r, "https://open.spotify.com/intl-de/track/"+id, http.StatusFound)
+	addClick(s.mongoClient, id, "spotifyId")
 }
 
-type Link struct {
-	SongID    string `bson:"songId"`
-	SpotifyID string `bson:"spotifyId"`
-}
-
-func insertSpotifyId(mCl *mongo.Client, song string, spotify string) {
+func insertSong(mCl *mongo.Client, song *Song) {
 	collection := mCl.Database("noJSHypeddit").Collection("links")
-	newLink := &Link{
-		SongID:    song,
-		SpotifyID: spotify,
-	}
-	result, err := collection.InsertOne(context.TODO(), newLink)
+	song.NumClickSpotifyId = 0
+	result, err := collection.InsertOne(context.TODO(), song)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Inserted Song with ID: %s. MongoID: %s\n", song, result.InsertedID)
+	fmt.Printf("Inserted %s with ID: %s. MongoID: %s\n", song.Name, song.SongId, result.InsertedID)
 }
 
-func getSpotifyId(mCl *mongo.Client, song string) (string, error) {
+func getSong(mCl *mongo.Client, song string) (*Song, error) {
 	collection := mCl.Database("noJSHypeddit").Collection("links")
 	filter := bson.D{{Key: "songId", Value: song}}
-	var result Link
+	var result *Song
 	err := collection.FindOne(context.TODO(), filter).Decode(&result)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	return result, nil
+}
 
-	return result.SpotifyID, nil
+func addClick(mCl *mongo.Client, id string, target string) {
+	collection := mCl.Database("noJSHypeddit").Collection("links")
+	filter := bson.D{{Key: target, Value: id}}
+	update := bson.D{{Key: "$inc", Value: bson.D{{Key: "numClicks-" + target, Value: 1}}}}
+	_, err := collection.UpdateOne(context.TODO(), filter, update)
+	if err != nil {
+		fmt.Printf("Register click failed. Target: %s\n", target)
+	}
 }
