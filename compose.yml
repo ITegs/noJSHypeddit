@@ -1,16 +1,17 @@
 services:
-  redis:
-    image: redis:alpine
+  mongodb:
+    image: mongo:latest
     ports:
-      - "6379:6379"
+      - 27017:27017
     volumes:
-      - redis-data:/data
+      - mongodb-data:/data/db
+
   backend:
     build: .
     ports:
       - "8000:8000"
     depends_on:
-      - redis
+      - mongodb
 
 volumes:
-  redis-data:
+  mongodb-data:
