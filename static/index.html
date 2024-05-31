@@ -7,14 +7,12 @@
   </head>
   <body>
     <div>
-      <img src="data:image/png;base64,{{.Cover}}" alt="Song cover" />
-      <h1>Stream &raquo;{{.Name}}&laquo; by {{.Artist}} now!</h1>
-      <a
-        href="/spotify?id={{.Spotify}}"
-        target="_blank"
-        rel="noopener noreferrer"
-        >Spotify</a
-      >
+      <h1>New in!</h1>
+      <ul>
+        <li><a href="/s/hometown">Hometown by French79</a></li>
+        <li><a href="/s/high-tide">High tide by Ehrling</a></li>
+        <li><a href="/s/whole-heart">Whole Heart by Gryffin</a></li>
+      </ul>
     </div>
   </body>
   <style>
@@ -38,24 +36,20 @@
       background-color: #bababa;
       display: flex;
       flex-direction: column;
-      align-items: center;
-    }
-
-    img {
-      height: 25rem;
-      aspect-ratio: 1;
-      object-fit: cover;
-      border-radius: 3rem;
-      margin: 3rem;
+      /* align-items: center; */
     }
 
     h1 {
       color: #262626;
       font-size: 2rem;
+      padding-bottom: 1rem;
+    }
+
+    li {
+      padding-top: 1rem;
     }
 
     a {
-      padding-top: 3rem;
       color: #4e8098;
       font-size: 1.3rem;
     }

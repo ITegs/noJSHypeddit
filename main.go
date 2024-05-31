@@ -15,6 +15,8 @@ import (
 type Song struct {
 	SongId            string `bson:"songId"`
 	Name              string `bson:"name"`
+	Artist            string `bson:"artist"`
+	Cover             string `bson:"cover"`
 	SpotifyId         string `bson:"spotifyId"`
 	NumClicksSongId   int    `bson:"numClicks-songId"`
 	NumClickSpotifyId int    `bson:"numClicks-spotifyId"`
@@ -44,14 +46,18 @@ func initDB() (*mongo.Client, error) {
 	return mongoClient, nil
 }
 
+type pages struct {
+	index *template.Template
+	song  *template.Template
+}
+
 type apiServer struct {
-	template    *template.Template
+	pages       *pages
 	mongoClient *mongo.Client
 }
 
 func main() {
 	fmt.Println("Program started!")
-
 	fmt.Println("Initializing the DB")
 	mCl, err := initDB()
 	if err != nil {
@@ -59,15 +65,23 @@ func main() {
 		return
 	}
 
-	fmt.Println("Opening the template")
-	tmpl, err := template.ParseFiles("./static/song.html")
+	fmt.Println("Opening the templates")
+	index, err := template.ParseFiles("./static/index.html")
 	if err != nil {
-		fmt.Println("Opening template failed")
+		fmt.Println("Opening song template failed")
+		return
+	}
+	song, err := template.ParseFiles("./static/song.html")
+	if err != nil {
+		fmt.Println("Opening song template failed")
 		return
 	}
 
 	apiServer := &apiServer{
-		template:    tmpl,
+		pages: &pages{
+			index: index,
+			song:  song,
+		},
 		mongoClient: mCl,
 	}
 
@@ -94,6 +108,11 @@ func (s *apiServer) buildApi() *httprouter.Router {
 	var routes = []*Route{
 		{
 			Method:  http.MethodGet,
+			Path:    "/",
+			Handler: http.HandlerFunc(s.index),
+		},
+		{
+			Method:  http.MethodGet,
 			Path:    "/s/:songId",
 			Handler: http.HandlerFunc(s.song),
 		},
@@ -112,8 +131,14 @@ func (s *apiServer) buildApi() *httprouter.Router {
 	return router
 }
 
+func (s *apiServer) index(w http.ResponseWriter, r *http.Request) {
+	s.pages.index.Execute(w, nil)
+}
+
 type PageData struct {
 	Name    string
+	Artist  string
+	Cover   string
 	Spotify string
 }
 
@@ -135,10 +160,12 @@ func (s *apiServer) song(w http.ResponseWriter, r *http.Request) {
 
 	data := PageData{
 		Name:    song.Name,
+		Artist:  song.Artist,
+		Cover:   song.Cover,
 		Spotify: song.SpotifyId,
 	}
 
-	s.template.Execute(w, data)
+	s.pages.song.Execute(w, data)
 	addClick(s.mongoClient, id, "songId")
 }
 
