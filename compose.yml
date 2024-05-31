@@ -11,6 +11,7 @@ services:
     build:
       context: .
       target: hot-reload
+    command: '-build="sleep 3 && go build -o /build/main main.go" -command="/build/main" -log-prefix=false'
     ports:
       - "8000:8000"
     volumes:

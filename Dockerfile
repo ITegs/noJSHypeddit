@@ -13,9 +13,13 @@ RUN go mod download
 # +-----------------------------------------------------------------------------
 FROM vendor as hot-reload
 
-RUN go install github.com/cosmtrek/air@latest
+ENTRYPOINT [ "CompileDaemon" ]
 
-CMD [ "air" ]
+# Install CompileDaemon, which will watch for changes in the source code and
+# recompile the binaries on the fly.
+RUN apk add --no-cache git
+RUN go get github.com/githubnemo/CompileDaemon &&\
+    go install github.com/githubnemo/CompileDaemon
 
 # +-----------------------------------------------------------------------------
 # | Build the binaries
