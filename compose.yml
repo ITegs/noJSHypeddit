@@ -1,15 +1,20 @@
 services:
   mongodb:
     image: mongo:latest
+    command: --quiet --logpath /dev/null
     ports:
       - 27017:27017
     volumes:
       - mongodb-data:/data/db
 
   backend:
-    build: .
+    build:
+      context: .
+      target: hot-reload
     ports:
       - "8000:8000"
+    volumes:
+      - ./:/app:ro
     depends_on:
       - mongodb
 
