@@ -24,9 +24,9 @@ type db struct {
 }
 
 type DB interface {
-	insertSong(song *Song)
-	getSong(song string) (*Song, error)
-	addClick(id string, target string)
+	InsertSong(song *Song)
+	GetSong(song string) (*Song, error)
+	AddClick(id string, target string)
 }
 
 func NewDB(collection *mongo.Collection) DB {
@@ -70,7 +70,7 @@ func initDB() (*mongo.Client, error) {
 	return mongoClient, nil
 }
 
-func (db *db) insertSong(song *Song) {
+func (db *db) InsertSong(song *Song) {
 	song.NumClickSpotifyId = 0
 	result, err := db.collection.InsertOne(context.TODO(), song)
 	if err != nil {
@@ -79,7 +79,7 @@ func (db *db) insertSong(song *Song) {
 	fmt.Printf("Inserted %s with ID: %s. MongoID: %s\n", song.Name, song.SongId, result.InsertedID)
 }
 
-func (db *db) getSong(song string) (*Song, error) {
+func (db *db) GetSong(song string) (*Song, error) {
 	filter := bson.D{{Key: "songId", Value: song}}
 	var result *Song
 	err := db.collection.FindOne(context.TODO(), filter).Decode(&result)
@@ -89,7 +89,7 @@ func (db *db) getSong(song string) (*Song, error) {
 	return result, nil
 }
 
-func (db *db) addClick(id string, target string) {
+func (db *db) AddClick(id string, target string) {
 	filter := bson.D{{Key: target, Value: id}}
 	update := bson.D{{Key: "$inc", Value: bson.D{{Key: "numClicks-" + target, Value: 1}}}}
 	_, err := db.collection.UpdateOne(context.TODO(), filter, update)

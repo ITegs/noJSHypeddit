@@ -3,9 +3,9 @@ package app
 import (
 	"fmt"
 	"net/http"
-	"text/template"
 
 	"github.com/ITegs/noJSHypeddit/database"
+	"github.com/ITegs/noJSHypeddit/renderer"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -14,42 +14,23 @@ type App interface {
 }
 
 type app struct {
-	pages *pages
-	db    *database.DB
+	db       database.DB
+	renderer renderer.Renderer
 }
 
-func NewApp(DB *database.DB) App {
+func NewApp(DB database.DB, Renderer renderer.Renderer) App {
 	app := &app{
-		db: DB,
+		db:       DB,
+		renderer: Renderer,
 	}
 
 	return app
 }
 
-type pages struct {
-	index *template.Template
-	song  *template.Template
-}
-
-type apiServer struct {
-}
-
 func (app *app) Main() {
 	fmt.Println("Program started!")
 
-	fmt.Println("Opening the templates")
-	index, err := template.ParseFiles("./static/index.html")
-	if err != nil {
-		fmt.Println("Opening song template failed")
-		return
-	}
-	song, err := template.ParseFiles("./static/song.html")
-	if err != nil {
-		fmt.Println("Opening song template failed")
-		return
-	}
-
-	api := apiServer.buildApi()
+	api := app.buildApi()
 
 	server := http.Server{
 		Addr:    ":8000",
@@ -66,24 +47,24 @@ type Route struct {
 	Handler http.Handler
 }
 
-func (s *apiServer) buildApi() *httprouter.Router {
+func (app *app) buildApi() *httprouter.Router {
 	router := httprouter.New()
 
 	var routes = []*Route{
 		{
 			Method:  http.MethodGet,
 			Path:    "/",
-			Handler: http.HandlerFunc(s.index),
+			Handler: http.HandlerFunc(app.index),
 		},
 		{
 			Method:  http.MethodGet,
 			Path:    "/s/:songId",
-			Handler: http.HandlerFunc(s.song),
+			Handler: http.HandlerFunc(app.song),
 		},
 		{
 			Method:  http.MethodGet,
 			Path:    "/spotify",
-			Handler: http.HandlerFunc(s.spotifyRedirect),
+			Handler: http.HandlerFunc(app.spotifyRedirect),
 		},
 	}
 
@@ -95,8 +76,8 @@ func (s *apiServer) buildApi() *httprouter.Router {
 	return router
 }
 
-func (s *apiServer) index(w http.ResponseWriter, r *http.Request) {
-	s.pages.index.Execute(w, nil)
+func (app *app) index(w http.ResponseWriter, r *http.Request) {
+	app.renderer.Execute("index", w, nil)
 }
 
 type PageData struct {
@@ -106,7 +87,7 @@ type PageData struct {
 	Spotify string
 }
 
-func (s *apiServer) song(w http.ResponseWriter, r *http.Request) {
+func (app *app) song(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Got request on song endpoint")
 	p := httprouter.ParamsFromContext(r.Context())
 	id := p.ByName("songId")
@@ -115,7 +96,7 @@ func (s *apiServer) song(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Println("Got a valid id: ", id)
-	song, err := getSong(s.mongoClient, id)
+	song, err := app.db.GetSong(id)
 	if err != nil {
 		fmt.Println("No Song found")
 		fmt.Println(err)
@@ -129,13 +110,13 @@ func (s *apiServer) song(w http.ResponseWriter, r *http.Request) {
 		Spotify: song.SpotifyId,
 	}
 
-	s.pages.song.Execute(w, data)
-	addClick(s.mongoClient, id, "songId")
+	app.renderer.Execute("song", w, data)
+	app.db.AddClick(id, "songId")
 }
 
-func (s *apiServer) spotifyRedirect(w http.ResponseWriter, r *http.Request) {
+func (app *app) spotifyRedirect(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Got request on spotify endpoint")
 	id := r.URL.Query().Get("id")
 	http.Redirect(w, r, "https://open.spotify.com/intl-de/track/"+id, http.StatusFound)
-	addClick(s.mongoClient, id, "spotifyId")
+	app.db.AddClick(id, "spotifyId")
 }
